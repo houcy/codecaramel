@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -10,20 +11,21 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
-	"os"
-	"reflect"
+	// "os"
+	// "reflect"
 )
 
-func status(c echo.Context) error {
+func exec(c echo.Context) error {
 	ctx := context.Background()
 	cli, err := client.NewEnvClient()
+
 	if err != nil {
 		panic(err)
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: "codecandy_compiler_default",
-		Cmd:   []string{"ls"},
+		Cmd:   []string{"l"},
 	}, nil, nil, "")
 	if err != nil {
 		panic(err)
@@ -32,36 +34,32 @@ func status(c echo.Context) error {
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		panic(err)
 	}
-
 	if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
 		panic(err)
 	}
 
 	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+
 	if err != nil {
 		panic(err)
 	}
 
+	buf := new(bytes.Buffer)
+	io.Copy(buf, out)
+	newStr := buf.String()
 	fmt.Println("===============")
-	fmt.Println(reflect.TypeOf(os.Stdout))
-	fmt.Println(reflect.TypeOf(out))
-	fmt.Println("===============")
-	io.Copy(os.Stdout, out)
-	fmt.Println("===============")
-	hoge, err := os.Open(os.Stdout)
-	fmt.Println(hoge)
-	fmt.Println(err)
-	fmt.Println(out)
-	fmt.Println(os.Stdout)
+	fmt.Println(newStr)
 	fmt.Println("===============")
 
 	jsonMap := map[string]string{
 		"status": "Active",
+		"result": newStr,
 	}
+
 	return c.JSON(http.StatusOK, jsonMap)
 }
 
-func exec(c echo.Context) error {
+func status(c echo.Context) error {
 	fmt.Println("/api/compiler/exec")
 
 	jsonMap := map[string]string{
