@@ -15,17 +15,39 @@ import (
 	// "reflect"
 )
 
+type ExecParams struct {
+	Language string `json:"language"`
+	Code     string `json:"code"`
+	Cmd      string `json:"cmd"`
+}
+
 func exec(c echo.Context) error {
+	// language := c.FormValue("language")
+	// cmd := c.FormValue("cmd")
+	// code := c.FormValue("code")
+
+	params := new(ExecParams)
+
+	if err := c.Bind(params); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("================")
+	fmt.Println(params)
+	fmt.Println(params.Language)
+	fmt.Println(params.Code)
+	fmt.Println(params.Cmd)
+	fmt.Println("================")
+
 	ctx := context.Background()
 	cli, err := client.NewEnvClient()
-
 	if err != nil {
 		panic(err)
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: "codecandy_compiler_default",
-		Cmd:   []string{"l"},
+		Cmd:   []string{"ls"},
 	}, nil, nil, "")
 	if err != nil {
 		panic(err)
@@ -34,6 +56,7 @@ func exec(c echo.Context) error {
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		panic(err)
 	}
+
 	if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
 		panic(err)
 	}
@@ -53,7 +76,7 @@ func exec(c echo.Context) error {
 
 	jsonMap := map[string]string{
 		"status": "Active",
-		"result": newStr,
+		"exec":   newStr,
 	}
 
 	return c.JSON(http.StatusOK, jsonMap)
@@ -78,7 +101,7 @@ func main() {
 
 	// == routing ==
 	e.GET("/api/compiler/status", status)
-	e.GET("/api/compiler/exec", exec)
+	e.POST("/api/compiler/exec", exec)
 	// =============
 
 	e.Start(":4567")
