@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
+	"strings"
 	// "os"
 	// "reflect"
 )
@@ -21,9 +22,25 @@ type ExecParams struct {
 	Code     string `json:"code"`
 	Cmd      string `json:"cmd"`
 	Input    string `json:"input"`
-	WorkDir  string `json:"workDir"`
 }
 
+// コンテナイメージ名を返却する
+func imgName(language string) string {
+	switch language {
+	case "Java", "Scala", "PHP":
+		return "codecandy_compiler_jvm_php"
+	case "Swift":
+		return "codecandy_compiler_swift"
+	default:
+		return "codecandy_compiler_default"
+	}
+}
+
+/**
+* POST: /api/container/exec
+* 提出されたコードを実行する
+*
+ */
 func exec(c echo.Context) error {
 	params := new(ExecParams)
 
@@ -36,6 +53,7 @@ func exec(c echo.Context) error {
 	fmt.Println(params.Language)
 	fmt.Println(params.Code)
 	fmt.Println(params.Cmd)
+	fmt.Println(imgName(params.Language))
 	fmt.Println("================")
 
 	ctx := context.Background()
@@ -45,8 +63,8 @@ func exec(c echo.Context) error {
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:      "codecandy_compiler_default",
-		Cmd:        []string{"pwd"},
+		Image:      imgName(params.Language),
+		Cmd:        strings.Split(params.Cmd, " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
 	}, nil, nil, "")
