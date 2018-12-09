@@ -3,15 +3,17 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/moby/moby/client"
 	"golang.org/x/net/context"
-	"io"
-	"net/http"
-	"strings"
 	// "os"
 	// "reflect"
 )
@@ -39,10 +41,10 @@ func imgName(language string) string {
 /**
 * POST: /api/container/exec
 * 提出されたコードを実行する
-*
- */
+**/
 func exec(c echo.Context) error {
 	params := new(ExecParams)
+	workDir := time.Now().Unix()
 
 	if err := c.Bind(params); err != nil {
 		panic(err)
@@ -54,6 +56,7 @@ func exec(c echo.Context) error {
 	fmt.Println(params.Code)
 	fmt.Println(params.Cmd)
 	fmt.Println(imgName(params.Language))
+	fmt.Println(workDir)
 	fmt.Println("================")
 
 	ctx := context.Background()
