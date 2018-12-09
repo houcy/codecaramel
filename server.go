@@ -15,17 +15,16 @@ import (
 	// "reflect"
 )
 
+// コード実行用のJSONパラメータ
 type ExecParams struct {
 	Language string `json:"language"`
 	Code     string `json:"code"`
 	Cmd      string `json:"cmd"`
+	Input    string `json:"input"`
+	WorkDir  string `json:"workDir"`
 }
 
 func exec(c echo.Context) error {
-	// language := c.FormValue("language")
-	// cmd := c.FormValue("cmd")
-	// code := c.FormValue("code")
-
 	params := new(ExecParams)
 
 	if err := c.Bind(params); err != nil {
@@ -46,8 +45,10 @@ func exec(c echo.Context) error {
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "codecandy_compiler_default",
-		Cmd:   []string{"ls"},
+		Image:      "codecandy_compiler_default",
+		Cmd:        []string{"pwd"},
+		Tty:        true,
+		WorkingDir: "/workspace",
 	}, nil, nil, "")
 	if err != nil {
 		panic(err)
@@ -74,6 +75,11 @@ func exec(c echo.Context) error {
 	fmt.Println(newStr)
 	fmt.Println("===============")
 
+	// err = cli.ContainerRemove(ctx, "id", types.ContainerRemoveOptions{})
+	// if err != nil {
+	// 	panic(err)
+	// }
+
 	jsonMap := map[string]string{
 		"status": "Active",
 		"exec":   newStr,
@@ -82,6 +88,7 @@ func exec(c echo.Context) error {
 	return c.JSON(http.StatusOK, jsonMap)
 }
 
+// APIのステータスを返却
 func status(c echo.Context) error {
 	fmt.Println("/api/compiler/exec")
 
