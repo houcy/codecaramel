@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,7 +17,6 @@ import (
 	"github.com/labstack/echo/middleware"
 	"github.com/moby/moby/client"
 	"golang.org/x/net/context"
-	// "os"
 	// "reflect"
 )
 
@@ -38,17 +40,56 @@ func imgName(language string) string {
 	}
 }
 
+// ファイル名を返却する
+func getFileName(language string) string {
+	switch language {
+	case "Gcc", "Clang":
+		return "main.c"
+	case "Ruby":
+		return "main.rb"
+	case "Python3":
+		return "main.py"
+	case "Golang":
+		return "main.go"
+	case "Nodejs":
+		return "main.js"
+	case "Java":
+		return "Main.java"
+	case "Scala":
+		return "Main.scala"
+	case "Swift":
+		return "main.swift"
+	case "CPP":
+		return "main.cpp"
+	case "PHP":
+		return "main.php"
+	case "Perl":
+		return "main.pl"
+	case "Bash":
+		return "main.sh"
+	case "Lua":
+		return "main.lua"
+	case "Haskell":
+		return "main.hs"
+	}
+
+	return "main"
+}
+
 /**
 * POST: /api/container/exec
 * 提出されたコードを実行する
 **/
 func exec(c echo.Context) error {
+	// リクエストされたパラメータを格納
 	params := new(ExecParams)
-	workDir := time.Now().Unix()
-
 	if err := c.Bind(params); err != nil {
 		panic(err)
 	}
+
+	// workDir名をUnix時間から作成
+	now := time.Now().Unix()
+	workDir := strconv.FormatInt(now, 10)
 
 	fmt.Println("================")
 	fmt.Println(params)
@@ -56,8 +97,23 @@ func exec(c echo.Context) error {
 	fmt.Println(params.Code)
 	fmt.Println(params.Cmd)
 	fmt.Println(imgName(params.Language))
+	fmt.Println(now)
 	fmt.Println(workDir)
 	fmt.Println("================")
+
+	// データの事前準備
+	// フォルダの作成
+	if err := os.Mkdir("/tmp"+workDir, 0777); err != nil {
+		fmt.Println(err)
+	}
+
+	// ファイルの作成
+	code := []byte(params.Code)
+	ioutil.WriteFile("/tmp/"+workDir+getFileName(params.Language), code, os.ModePerm)
+
+	// 標準入力用のファイル作成
+	input := []byte(params.Input)
+	ioutil.WriteFile("/tmp/"+workDir+"input", input, os.ModePerm)
 
 	ctx := context.Background()
 	cli, err := client.NewEnvClient()
@@ -70,10 +126,9 @@ func exec(c echo.Context) error {
 		Cmd:        strings.Split(params.Cmd, " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
-	}, nil, nil, "")
-	if err != nil {
-		panic(err)
-	}
+	}, &container.HostConfig{
+		Binds: []string{"/tmp/" + workDir + ":/workspace"},
+	}, nil, "")
 
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		panic(err)
@@ -109,7 +164,10 @@ func exec(c echo.Context) error {
 	return c.JSON(http.StatusOK, jsonMap)
 }
 
-// APIのステータスを返却
+/**
+* GET: /api/compiler/status
+* APIのステータスを返却
+**/
 func status(c echo.Context) error {
 	fmt.Println("/api/compiler/exec")
 
