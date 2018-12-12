@@ -24,7 +24,6 @@ import (
 type ExecParams struct {
 	Language string `json:"language"`
 	Code     string `json:"code"`
-	Cmd      string `json:"cmd"`
 	Input    string `json:"input"`
 }
 
@@ -72,8 +71,41 @@ func getFileName(language string) string {
 	case "Haskell":
 		return "main.hs"
 	}
-
 	return "main"
+}
+
+func getCmd(language string) string {
+	switch language {
+	case "Gcc", "Clang":
+		return "gcc -o main main.c && ./main"
+	case "Ruby":
+		return "ruby main.rb"
+	case "Python3":
+		return "python main.py"
+	case "Golang":
+		return "go run main.go"
+	case "Nodejs":
+		return "nodejs main.js"
+	case "Java":
+		return "javac Main.java && java Main"
+	case "Scala":
+		return "scalac Main.scala && scala Main"
+	case "Swift":
+		return "swift main.swift"
+	case "CPP":
+		return "g++ -o main main.cpp && ./main"
+	case "PHP":
+		return "php main.php"
+	case "Perl":
+		return "perl main.pl"
+	case "Bash":
+		return "bash main.sh"
+	case "Lua":
+		return "lua 5.3 main.lua"
+	case "Haskell":
+		return "runghc main.hs"
+	}
+	return "No cmd"
 }
 
 /**
@@ -123,7 +155,7 @@ func exec(c echo.Context) error {
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      imgName(params.Language),
-		Cmd:        strings.Split(params.Cmd, " "),
+		Cmd:        strings.Split(getCmd(params.Language), " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
 	}, &container.HostConfig{
