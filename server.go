@@ -127,7 +127,6 @@ func exec(c echo.Context) error {
 	fmt.Println(params)
 	fmt.Println(params.Language)
 	fmt.Println(params.Code)
-	fmt.Println(params.Cmd)
 	fmt.Println(imgName(params.Language))
 	fmt.Println(now)
 	fmt.Println(workDir)
@@ -135,17 +134,17 @@ func exec(c echo.Context) error {
 
 	// データの事前準備
 	// フォルダの作成
-	if err := os.Mkdir("/tmp"+workDir, 0777); err != nil {
+	if err := os.Mkdir("/tmp/"+workDir, 0777); err != nil {
 		fmt.Println(err)
 	}
 
 	// ファイルの作成
 	code := []byte(params.Code)
-	ioutil.WriteFile("/tmp/"+workDir+getFileName(params.Language), code, os.ModePerm)
+	ioutil.WriteFile("/tmp/"+workDir+"/"+getFileName(params.Language), code, os.ModePerm)
 
 	// 標準入力用のファイル作成
 	input := []byte(params.Input)
-	ioutil.WriteFile("/tmp/"+workDir+"input", input, os.ModePerm)
+	ioutil.WriteFile("/tmp/"+workDir+"/input", input, os.ModePerm)
 
 	ctx := context.Background()
 	cli, err := client.NewEnvClient()
@@ -153,9 +152,11 @@ func exec(c echo.Context) error {
 		panic(err)
 	}
 
+	cmd := "bash -c cd /workspace && /usr/bin/time -q -f \"%e\" -o /workspace/time.txt timeout 30 " + getCmd(params.Language) + " < input"
+
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      imgName(params.Language),
-		Cmd:        strings.Split(getCmd(params.Language), " "),
+		Cmd:        strings.Split(cmd, " "), // strings.Split("pwd", " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
 	}, &container.HostConfig{
@@ -180,6 +181,7 @@ func exec(c echo.Context) error {
 	io.Copy(buf, out)
 	newStr := buf.String()
 	fmt.Println("===============")
+	fmt.Println(cmd)
 	fmt.Println(newStr)
 	fmt.Println("===============")
 
@@ -187,6 +189,10 @@ func exec(c echo.Context) error {
 	// if err != nil {
 	// 	panic(err)
 	// }
+
+	if err := os.RemoveAll("/tmp/" + workDir); err != nil {
+		fmt.Println(err)
+	}
 
 	jsonMap := map[string]string{
 		"status": "Active",
