@@ -128,11 +128,6 @@ func compilerWorker(params *ExecParams, cli *client.Client, ctx context.Context,
 		//}
 		cli.ContainerWait(ctx, resp.ID)
 
-		//if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
-		//	panic(err)
-		//}
-		cli.ContainerWait(ctx, resp.ID)
-
 		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
 		// out := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
 
