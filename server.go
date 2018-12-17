@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	// "log"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +19,6 @@ import (
 	"github.com/labstack/echo/middleware"
 	"github.com/moby/moby/client"
 	"golang.org/x/net/context"
-	// "reflect"
 )
 
 // コード実行用のJSONパラメータ
@@ -108,6 +109,50 @@ func getCmd(language string) string {
 	return "No cmd"
 }
 
+func compilerWorker(params *ExecParams, cli *client.Client, ctx context.Context, resp container.ContainerCreateCreatedBody, workDir string) <-chan string {
+	receiver := make(chan string)
+
+	go func() {
+
+		fmt.Println(reflect.TypeOf(cli))
+		fmt.Println(reflect.TypeOf(ctx))
+		fmt.Println(reflect.TypeOf(resp.ID))
+
+		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+			panic(err)
+		}
+
+		// 実行が終わるまで待機
+		//if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
+		//	panic(err)
+		//}
+		cli.ContainerWait(ctx, resp.ID)
+
+		//if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
+		//	panic(err)
+		//}
+		cli.ContainerWait(ctx, resp.ID)
+
+		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+		// out := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+
+		if err != nil {
+			panic(err)
+		}
+
+		buf := new(bytes.Buffer)
+		io.Copy(buf, out)
+		newStr := buf.String()
+		fmt.Println("===============")
+		fmt.Println(newStr)
+		fmt.Println("===============")
+
+		receiver <- newStr
+		close(receiver)
+	}()
+	return receiver
+}
+
 /**
 * POST: /api/container/exec
 * 提出されたコードを実行する
@@ -119,20 +164,10 @@ func exec(c echo.Context) error {
 		panic(err)
 	}
 
-	// workDir名をUnix時間から作成
+	// データの事前準備
 	now := time.Now().Unix()
 	workDir := strconv.FormatInt(now, 10)
 
-	fmt.Println("================")
-	fmt.Println(params)
-	fmt.Println(params.Language)
-	fmt.Println(params.Code)
-	fmt.Println(imgName(params.Language))
-	fmt.Println(now)
-	fmt.Println(workDir)
-	fmt.Println("================")
-
-	// データの事前準備
 	// フォルダの作成
 	if err := os.Mkdir("/tmp/"+workDir, 0777); err != nil {
 		fmt.Println(err)
@@ -152,54 +187,70 @@ func exec(c echo.Context) error {
 		panic(err)
 	}
 
-	cmd := "bash -c cd /workspace && /usr/bin/time -q -f \"%e\" -o /workspace/time.txt timeout 30 " + getCmd(params.Language) + " < input"
+	cmd := getCmd(params.Language) + " < input"
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      imgName(params.Language),
-		Cmd:        strings.Split(cmd, " "), // strings.Split("pwd", " "),
+		Cmd:        strings.Split(cmd, " "), // strings.Split("ls", " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
 	}, &container.HostConfig{
 		Binds: []string{"/tmp/" + workDir + ":/workspace"},
 	}, nil, "")
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		panic(err)
+	fmt.Println(reflect.TypeOf(cli))
+	fmt.Println(reflect.TypeOf(ctx))
+	fmt.Println(reflect.TypeOf(resp))
+
+	receiver := compilerWorker(params, cli, ctx, resp, workDir)
+	timeout := 5 * time.Second
+
+	select {
+	case receive := <-receiver:
+		fmt.Println("---------------")
+		fmt.Println(receive)
+		// fmt.Println(receiver)
+		fmt.Println("---------------")
+		jsonMap := map[string]string{
+			"status": "Active",
+			"result": receive,
+		}
+
+		err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		if err := os.RemoveAll("/tmp/" + workDir); err != nil {
+			fmt.Println(err)
+		}
+
+		return c.JSON(http.StatusOK, jsonMap)
+	case <-time.After(timeout):
+		err = cli.ContainerStop(ctx, resp.ID, &timeout)
+		if err != nil {
+			panic(err)
+		}
+		// err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
+		// if err != nil {
+		// 	panic(err)
+		// }
+		if err := os.RemoveAll("/tmp/" + workDir); err != nil {
+			fmt.Println(err)
+		}
+		jsonMap := map[string]string{
+			"status": "Timeout",
+			// "exec":   newStr,
+		}
+		fmt.Println("time out!!")
+		return c.JSON(http.StatusOK, jsonMap)
 	}
 
-	if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
-		panic(err)
-	}
-
-	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-
-	if err != nil {
-		panic(err)
-	}
-
-	buf := new(bytes.Buffer)
-	io.Copy(buf, out)
-	newStr := buf.String()
-	fmt.Println("===============")
-	fmt.Println(cmd)
-	fmt.Println(newStr)
-	fmt.Println("===============")
-
-	// err = cli.ContainerRemove(ctx, "id", types.ContainerRemoveOptions{})
-	// if err != nil {
-	// 	panic(err)
+	// jsonMap := map[string]string{
+	// 	"status": "Active",
 	// }
 
-	if err := os.RemoveAll("/tmp/" + workDir); err != nil {
-		fmt.Println(err)
-	}
-
-	jsonMap := map[string]string{
-		"status": "Active",
-		"exec":   newStr,
-	}
-
-	return c.JSON(http.StatusOK, jsonMap)
+	// return c.JSON(http.StatusOK, jsonMap)
 }
 
 /**
