@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	// "log"
 	"net/http"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
+	// "log"
+	// "reflect"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -32,11 +32,11 @@ type ExecParams struct {
 func imgName(language string) string {
 	switch language {
 	case "Java", "Scala", "PHP":
-		return "codecandy_compiler_jvm_php"
+		return "codecaramel_compiler_jvm_php"
 	case "Swift":
-		return "codecandy_compiler_swift"
+		return "codecaramel_compiler_swift"
 	default:
-		return "codecandy_compiler_default"
+		return "codecaramel_compiler_default"
 	}
 }
 
@@ -113,23 +113,14 @@ func compilerWorker(params *ExecParams, cli *client.Client, ctx context.Context,
 	receiver := make(chan string)
 
 	go func() {
-
-		fmt.Println(reflect.TypeOf(cli))
-		fmt.Println(reflect.TypeOf(ctx))
-		fmt.Println(reflect.TypeOf(resp.ID))
-
 		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 			panic(err)
 		}
 
 		// 実行が終わるまで待機
-		//if _, err = cli.ContainerWait(ctx, resp.ID); err != nil {
-		//	panic(err)
-		//}
 		cli.ContainerWait(ctx, resp.ID)
 
 		out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-		// out := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
 
 		if err != nil {
 			panic(err)
@@ -138,9 +129,6 @@ func compilerWorker(params *ExecParams, cli *client.Client, ctx context.Context,
 		buf := new(bytes.Buffer)
 		io.Copy(buf, out)
 		newStr := buf.String()
-		fmt.Println("===============")
-		fmt.Println(newStr)
-		fmt.Println("===============")
 
 		receiver <- newStr
 		close(receiver)
@@ -193,22 +181,15 @@ func exec(c echo.Context) error {
 		Binds: []string{"/tmp/" + workDir + ":/workspace"},
 	}, nil, "")
 
-	fmt.Println(reflect.TypeOf(cli))
-	fmt.Println(reflect.TypeOf(ctx))
-	fmt.Println(reflect.TypeOf(resp))
-
 	receiver := compilerWorker(params, cli, ctx, resp, workDir)
 	timeout := 30 * time.Second
 
 	select {
 	case receive := <-receiver:
-		fmt.Println("---------------")
-		fmt.Println(receive)
-		// fmt.Println(receiver)
-		fmt.Println("---------------")
 		jsonMap := map[string]string{
 			"status": "Active",
 			"result": receive,
+			"cmd":    cmd,
 		}
 
 		err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
@@ -235,17 +216,11 @@ func exec(c echo.Context) error {
 		}
 		jsonMap := map[string]string{
 			"status": "Timeout",
-			// "exec":   newStr,
+			"exec":   "",
+			"cmd":    cmd,
 		}
-		fmt.Println("time out!!")
 		return c.JSON(http.StatusOK, jsonMap)
 	}
-
-	// jsonMap := map[string]string{
-	// 	"status": "Active",
-	// }
-
-	// return c.JSON(http.StatusOK, jsonMap)
 }
 
 /**
@@ -253,8 +228,6 @@ func exec(c echo.Context) error {
 * APIのステータスを返却
 **/
 func status(c echo.Context) error {
-	fmt.Println("/api/compiler/exec")
-
 	jsonMap := map[string]string{
 		"status": "Active",
 	}
