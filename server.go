@@ -198,7 +198,7 @@ func exec(c echo.Context) error {
 	fmt.Println(reflect.TypeOf(resp))
 
 	receiver := compilerWorker(params, cli, ctx, resp, workDir)
-	timeout := 5 * time.Second
+	timeout := 30 * time.Second
 
 	select {
 	case receive := <-receiver:
@@ -226,12 +226,12 @@ func exec(c echo.Context) error {
 		if err != nil {
 			panic(err)
 		}
-		// err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
-		// if err != nil {
-		// 	panic(err)
-		// }
 		if err := os.RemoveAll("/tmp/" + workDir); err != nil {
 			fmt.Println(err)
+		}
+		err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
+		if err != nil {
+			panic(err)
 		}
 		jsonMap := map[string]string{
 			"status": "Timeout",
