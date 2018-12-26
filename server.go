@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -26,6 +27,21 @@ type ExecParams struct {
 	Language string `json:"language"`
 	Code     string `json:"code"`
 	Input    string `json:"input"`
+}
+
+type Cmd struct {
+	Query string `json:"query"`
+}
+
+// < > &をエスケープしないようにする関数
+func JSONMarshal(v interface{}, safeEncoding bool) ([]byte, error) {
+	b, err := json.Marshal(v)
+	if safeEncoding {
+		b = bytes.Replace(b, []byte("\\u003c"), []byte("<"), -1)
+		b = bytes.Replace(b, []byte("\\u003e"), []byte(">"), -1)
+		b = bytes.Replace(b, []byte("\\u0026"), []byte("&"), -1)
+	}
+	return b, err
 }
 
 // コンテナイメージ名を返却する
@@ -164,17 +180,19 @@ func exec(c echo.Context) error {
 	input := []byte(params.Input)
 	ioutil.WriteFile("/tmp/"+workDir+"/input", input, os.ModePerm)
 
+	// 実行用スクリプトの作成
+	cmd := []byte("#!/bin/bash\ncat input | " + getCmd(params.Language)) // 実行コマンドの生成
+	ioutil.WriteFile("/tmp/"+workDir+"/exec.sh", cmd, os.ModePerm)
+
 	ctx := context.Background()
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		panic(err)
 	}
 
-	cmd := getCmd(params.Language) + " < input"
-
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      imgName(params.Language),
-		Cmd:        strings.Split(cmd, " "), // strings.Split("ls", " "),
+		Cmd:        strings.Split("bash exec.sh", " "), // strings.Split("ls", " "),
 		Tty:        true,
 		WorkingDir: "/workspace",
 	}, &container.HostConfig{
@@ -189,7 +207,6 @@ func exec(c echo.Context) error {
 		jsonMap := map[string]string{
 			"status": "Active",
 			"result": receive,
-			"cmd":    cmd,
 		}
 
 		err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
@@ -217,7 +234,6 @@ func exec(c echo.Context) error {
 		jsonMap := map[string]string{
 			"status": "Timeout",
 			"exec":   "",
-			"cmd":    cmd,
 		}
 		return c.JSON(http.StatusOK, jsonMap)
 	}
