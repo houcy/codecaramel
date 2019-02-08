@@ -244,8 +244,10 @@ func exec(c echo.Context) error {
 * APIのステータスを返却
 **/
 func status(c echo.Context) error {
+	host, _ := os.Hostname()
 	jsonMap := map[string]string{
-		"status": "Active",
+		"status":   "Active",
+		"hostname": host,
 	}
 	return c.JSON(http.StatusOK, jsonMap)
 }
