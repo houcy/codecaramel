@@ -1,6 +1,21 @@
 version: '2'
 
 services:
+  nginx:
+    image: nginx
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "80:80"
+    links:
+      - server
+  server:
+    build:
+      contex: .
+      dockerfile: ./docker/server/Dockerfile
+
+  # オンラインコンパイラ用コンテナ
   compiler_default:
     container_name: compiler_default
     build:
