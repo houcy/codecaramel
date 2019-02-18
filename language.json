@@ -167,6 +167,6 @@
     "source_file": "main.ts",
     "exec_cmd": "tsc main.ts && nodejs main.js",
     "image_name": "codecandy_compiler_default",
-    "time_out": 10
+    "time_out": "10"
   }
 }
